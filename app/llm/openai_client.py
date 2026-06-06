@@ -19,7 +19,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL")
+OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL") or None
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 CLIENT = OpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_BASE_URL)
