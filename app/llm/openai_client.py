@@ -34,7 +34,13 @@ CHAT_MODEL = os.getenv("OPENAI_CHAT_MODEL", "gpt-4o-mini")
 
 def embed_texts(texts: List[str]) -> List[List[float]]:
     """Gera embeddings para uma lista de textos usando `EMBEDDING_MODEL`."""
-    resp = CLIENT.embeddings.create(model=EMBEDDING_MODEL, input=texts)
+    try:
+        resp = CLIENT.embeddings.create(model=EMBEDDING_MODEL, input=texts)
+    except Exception as exc:
+        effective_url = OPENAI_BASE_URL or "https://api.openai.com/v1"
+        raise RuntimeError(
+            f"Embeddings call failed (base_url={effective_url!r}, model={EMBEDDING_MODEL!r}): {exc}"
+        ) from exc
     return [d.embedding for d in resp.data]
 
 

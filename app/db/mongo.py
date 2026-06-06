@@ -11,6 +11,7 @@ Variáveis de ambiente:
 """
 
 import os
+import certifi
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 
 from dotenv import load_dotenv
@@ -21,7 +22,10 @@ load_dotenv()  # Carrega valores do arquivo .env para o ambiente (se existir)
 MONGODB_URI: str = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
 
 # uuidRepresentation="standard" garante compatibilidade moderna com UUIDs.
-client: AsyncIOMotorClient = AsyncIOMotorClient(MONGODB_URI, uuidRepresentation="standard")
+# tlsCAFile=certifi.where() resolve SSL no Python 3.14+ com MongoDB Atlas.
+client: AsyncIOMotorClient = AsyncIOMotorClient(
+    MONGODB_URI, uuidRepresentation="standard", tlsCAFile=certifi.where()
+)
 
 def get_db() -> AsyncIOMotorDatabase:
     """Retorna a instância do database configurado via MONGODB_DB.
