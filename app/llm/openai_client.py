@@ -11,6 +11,7 @@ Variáveis de ambiente:
 - OPENAI_CHAT_MODEL: modelo de chat (padrão: "gpt-4o-mini").
 """
 
+import logging
 import os
 from typing import List
 from openai import OpenAI
@@ -19,8 +20,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+logger = logging.getLogger(__name__)
+
 OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL") or None
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+logger.warning("OpenAI client base_url=%s", OPENAI_BASE_URL or "(default OpenAI)")
 
 CLIENT = OpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_BASE_URL)
 EMBEDDING_MODEL = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-large")
