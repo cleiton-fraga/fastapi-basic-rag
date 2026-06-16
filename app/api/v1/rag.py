@@ -13,7 +13,8 @@ from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File,
 import io
 from app.db.mongo import get_db
 from app.schemas.rag import UploadDocResponse, AskRequest, AnswerResponse
-from app.rag.store import upsert_document, search_similar_chunks, get_owned_document_oid
+from app.rag.store import upsert_document, hybrid_search_chunks, get_owned_document_oid
+from app.rag.rerank import rerank
 from app.llm.openai_client import embed_texts, chat_completion
 from app.deps.auth import get_current_user_id
 from pypdf import PdfReader
@@ -98,9 +99,11 @@ async def ask(
 
     Etapas:
     1) Gera embedding da pergunta.
-    2) Busca vetorial restringida ao documento (`k` resultados).
-    3) Monta prompt (system/user) e chama LLM.
-    4) Retorna resposta e fontes (ids dos chunks).
+    2) Busca híbrida (vetorial + lexical/BM25) restringida ao documento, recuperando
+       um conjunto amplo (`candidates`).
+    3) Re-ranking dos candidatos e seleção dos `k` melhores.
+    4) Monta prompt (system/user) e chama LLM.
+    5) Retorna resposta e fontes (ids dos chunks).
     """
 
     # Verifica s o documento pertence ao usuário
@@ -110,13 +113,18 @@ async def ask(
 
     # 1) embedding da pergunta
     q_emb = embed_texts([body.question])[0]
-    
-    # 2) busca chunks similares
-    results = await search_similar_chunks(db, body.doc_id, q_emb, k=body.k)
-    if not results:
+
+    # 2) busca híbrida (vetorial + BM25) recuperando um conjunto amplo de candidatos
+    candidates = await hybrid_search_chunks(
+        db, body.doc_id, body.question, q_emb, k=body.candidates
+    )
+    if not candidates:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No context found")
-    
-    # 3) monta prompt com contexto
+
+    # 3) re-ranking e seleção dos k melhores
+    results = rerank(body.question, candidates, top_n=body.k)
+
+    # 4) monta prompt com contexto
     context = "".join([r.get("chunk", "") for r in results])
     system = "Você é um assistente que responde com base apenas no CONTEXTO fornecido. Se não houver informação suficiente, diga que não sabe."
     user = f"CONTEXTO: {context} PERGUNTA: {body.question}"

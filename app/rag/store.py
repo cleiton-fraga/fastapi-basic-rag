@@ -106,3 +106,85 @@ async def search_similar_chunks(db, doc_id: str, query_embedding: List[float], k
     ]
     cursor = db["chunks"].aggregate(pipeline)
     return [d async for d in cursor]
+
+
+async def hybrid_search_chunks(
+    db,
+    doc_id: str,
+    query_text: str,
+    query_embedding: List[float],
+    k: int = 30,
+    vector_weight: float = 0.7,
+    text_weight: float = 0.3,
+) -> List[Dict[str, Any]]:
+    """Busca híbrida (vetorial + lexical/BM25) fundida com `$rankFusion`.
+
+    Combina dois pipelines ranqueados sobre a coleção `chunks`:
+    - `vector`: `$vectorSearch` no campo `embeddings` (índice `vector_index`).
+    - `text`: `$search` (Atlas Search, índice `text_index`) por BM25 no campo `chunk`.
+
+    A fusão é feita por Reciprocal Rank Fusion via operador nativo `$rankFusion`
+    (requer MongoDB Atlas 8.1+). Ambos os pipelines são filtrados pelo documento.
+
+    Retorna até `k` chunks com `score` (do `$rankFusion`), ordenados por relevância.
+    Pensado para recuperar um conjunto amplo a ser reordenado por rerank.
+    """
+    try:
+        oid = ObjectId(doc_id)
+    except Exception:
+        return []
+    doc = await db["documents"].find_one({"_id": oid})
+    if not doc:
+        return []
+    document_id: ObjectId = doc["_id"]
+
+    pipeline = [
+        {
+            "$rankFusion": {
+                "input": {
+                    "pipelines": {
+                        "vector": [
+                            {
+                                "$vectorSearch": {
+                                    "index": "vector_index",
+                                    "path": "embeddings",
+                                    "queryVector": query_embedding,
+                                    "numCandidates": 200,
+                                    "limit": k,
+                                    "filter": {"document_id": document_id},
+                                }
+                            }
+                        ],
+                        "text": [
+                            {
+                                "$search": {
+                                    "index": "text_index",
+                                    "compound": {
+                                        "must": [
+                                            {"text": {"query": query_text, "path": "chunk"}}
+                                        ],
+                                        "filter": [
+                                            {"equals": {"path": "document_id", "value": document_id}}
+                                        ],
+                                    },
+                                }
+                            },
+                            {"$limit": k},
+                        ],
+                    }
+                },
+                "combination": {"weights": {"vector": vector_weight, "text": text_weight}},
+            }
+        },
+        {"$limit": k},
+        {
+            "$project": {
+                "_id": 1,
+                "chunk": 1,
+                "document_id": 1,
+                "score": {"$meta": "score"},
+            }
+        },
+    ]
+    cursor = db["chunks"].aggregate(pipeline)
+    return [d async for d in cursor]

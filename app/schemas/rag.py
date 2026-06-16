@@ -19,7 +19,8 @@ class UploadDocResponse(BaseModel):
 class AskRequest(BaseModel):
     doc_id: str = Field(description="Documento alvo da busca")
     question: str = Field(description="Pergunta do usuário")
-    k: int = Field(default=5, description="Quantidade de chunks similares a recuperar")
+    k: int = Field(default=5, description="Quantidade de chunks finais usados no contexto (após rerank)")
+    candidates: int = Field(default=30, description="Quantidade de candidatos recuperados na busca híbrida antes do rerank")
 
 class AnswerResponse(BaseModel):
     answer: str = Field(description="Resposta gerada pelo modelo")

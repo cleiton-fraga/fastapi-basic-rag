@@ -112,6 +112,52 @@ db.runCommand({
 
 - O pipeline de busca usa `$vectorSearch` com `index: "vector_index"` e filtro por `document_id` (veja [`app.rag.store.search_similar_chunks`](app/rag/store.py)).
 
+## Busca híbrida e re-ranking
+
+A rota `/rag/ask` usa **busca híbrida** (vetorial + lexical/BM25) fundida pelo
+operador nativo `$rankFusion` (requer **MongoDB Atlas 8.1+**) e, em seguida,
+**re-ranking** por cross-encoder via API (padrão: Cohere). Veja
+[`app.rag.store.hybrid_search_chunks`](app/rag/store.py) e [`app.rag.rerank.rerank`](app/rag/rerank.py).
+
+### Índice de texto (Atlas Search) — necessário para o BM25
+
+Além do `vector_index`, crie um índice de texto `text_index` na coleção `chunks`
+indexando o campo `chunk` (busca lexical) e `document_id` (filtro por documento):
+
+```
+use curso_api
+db.runCommand({
+  createSearchIndexes: "chunks",
+  indexes: [
+    {
+      name: "text_index",
+      definition: {
+        mappings: {
+          dynamic: false,
+          fields: {
+            chunk: { type: "string" },
+            document_id: { type: "objectId" }
+          }
+        }
+      }
+    }
+  ]
+})
+```
+
+### Variáveis de ambiente do rerank
+
+- `RERANK_API_KEY`: chave da API de rerank. **Se ausente, o rerank é desativado**
+  e os candidatos da busca híbrida são usados na ordem original (sem quebrar o `/ask`).
+- `RERANK_BASE_URL`: endpoint base (padrão: `https://api.cohere.com`). Troque para
+  usar Jina/Voyage com a mesma estrutura de request `/v2/rerank`.
+- `RERANK_MODEL`: modelo de rerank (padrão: `rerank-v3.5`).
+
+### Parâmetros do `/rag/ask`
+
+- `candidates` (padrão: 30): quantidade recuperada na busca híbrida antes do rerank.
+- `k` (padrão: 5): quantidade de chunks finais (após rerank) usados no contexto.
+
 ## Instalação
 
 - Criar e ativar virtualenv:
