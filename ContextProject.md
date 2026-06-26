@@ -11,6 +11,7 @@ Resumo de contexto para orientar próximas interações no chat com foco em arqu
   - Dependência de auth (Bearer): `app/deps/auth.py`
   - OpenAI (embeddings/chat): `app/llm/openai_client.py`
   - RAG (chunking/armazenamento/busca): pasta `app/rag/`
+  - Guardrails (input/output rails + middleware): pasta `app/guardrails/`
   - Rotas v1: pasta `app/api/v1/`
 
 ## Stack e versões
@@ -43,6 +44,8 @@ Resumo de contexto para orientar próximas interações no chat com foco em arqu
 - RAG (protegidos por Bearer)
   - POST `/rag/documents` multipart (PDF + title) → `UploadDocResponse` | `app/api/v1/rag.py`
   - POST `/rag/ask` → `AnswerResponse` | `app/api/v1/rag.py`
+    - Envolvido pelos guardrails: `apply_input_rail` (antes do LLM, com curto-circuito)
+      e `apply_output_rail` (depois do LLM). Ver `app/guardrails/` e `docs/guardrails.md`.
 
 ## Símbolos importantes
 - Segurança:
@@ -107,7 +110,7 @@ curl -X POST http://localhost:8000/api/v1/rag/documents \
 - Hash de senha duplicado em `app/api/v1/users.py`; padronizar usando `app.core.security.hash_password`.
 - Nome do parâmetro em `list_users_endpoint`: `create_user_id` → `current_user_id` para consistência (`app/api/v1/users.py`).
 - "Upsert" em `app.rag.store.upsert_document` realiza sempre insert; implementar upsert real caso necessário (por `owner+title`).
-- Cliente OpenAI síncrono em rotas async; considerar Async API ou threadpool para evitar bloquear o event loop (`app/llm/openai_client.py`).
+- Cliente OpenAI síncrono em rotas async; `chat_completion` em `/rag/ask` já é isolado em threadpool (`run_in_threadpool`), mas `embed_texts` ainda roda síncrono — considerar Async API ou threadpool (`app/llm/openai_client.py`).
 - Validação MIME inclui "binary/octet-stream"; comum é "application/octet-stream" (`app/api/v1/rag.py`).
 - Código legado não usado: `app/db/memory.py` (id numérico vs `UserOut.id` string).
 - `load_dotenv()` chamado em múltiplos módulos; centralizar configurações reduziria acoplamento.

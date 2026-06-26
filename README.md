@@ -158,6 +158,34 @@ db.runCommand({
 - `candidates` (padrão: 30): quantidade recuperada na busca híbrida antes do rerank.
 - `k` (padrão: 5): quantidade de chunks finais (após rerank) usados no contexto.
 
+## Guardrails (filtro de segurança)
+
+A rota `/rag/ask` é envolvida por uma **camada de guardrails** que intercepta a
+requisição em dois momentos (ver [`app/guardrails`](app/guardrails) e
+[docs/guardrails.md](docs/guardrails.md)):
+
+- **Input rail** (antes do Ollama): prompt injection / jailbreak, PII, tópicos
+  proibidos e, opcionalmente, Llama Guard 3. Ao reprovar, devolve uma resposta
+  segura padrão **sem acionar o LLM** (curto-circuito).
+- **Output rail** (depois do Ollama): fidelidade ao contexto (anti-alucinação),
+  toxicidade, vazamento de PII/segredos e tom de voz.
+
+As checagens baratas (regex) rodam síncronas; as caras (Llama Guard via Ollama)
+rodam assíncronas/por amostragem. Cada bloqueio gera **trilha de auditoria** (log
++ coleção `guardrail_audit`). Por padrão, o classificador LLM vem **desligado** —
+apenas as checagens baratas atuam, e o endpoint nunca quebra (degradação graciosa).
+
+### Variáveis de ambiente dos guardrails
+
+- `GUARDRAILS_ENABLED` (padrão `true`), `GUARDRAILS_FAIL_OPEN` (padrão `true`).
+- `GUARDRAILS_INPUT_PII_ACTION` (`anonymize` | `block`), `GUARDRAILS_BANNED_TOPICS`.
+- `GUARDRAILS_FAITHFULNESS_MIN_OVERLAP` (padrão `0.18`), `GUARDRAILS_OUTPUT_SAMPLE_RATE`.
+- `GUARDRAILS_LLM_ENABLED` (padrão `false`), `GUARDRAILS_OLLAMA_BASE_URL`
+  (padrão `http://localhost:11434`), `GUARDRAILS_LLAMA_GUARD_MODEL` (padrão `llama-guard3`).
+- Auditoria: `GUARDRAILS_AUDIT_TO_MONGO` (padrão `true`), `GUARDRAILS_AUDIT_COLLECTION`.
+
+Tabela completa em [docs/guardrails.md](docs/guardrails.md).
+
 ## Instalação
 
 - Criar e ativar virtualenv:
